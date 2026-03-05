@@ -126,10 +126,7 @@ export default function Landing() {
                 <span className="relative">Launch Dashboard</span>
                 <ArrowRight className="relative w-6 h-6 group-hover:translate-x-2 transition-transform" />
               </Link>
-              <button className="inline-flex items-center gap-3 px-10 py-5 bg-white/5 border-2 border-white/20 text-white rounded-2xl hover:bg-white/10 hover:border-white/30 transition-all font-bold text-lg backdrop-blur-sm">
-                <BarChart3 className="w-6 h-6" />
-                Watch Demo
-              </button>
+              
             </div>
           </motion.div>
 
@@ -148,13 +145,7 @@ export default function Landing() {
                 transition={{ delay: 0.5 + index * 0.1 }}
                 className="relative group"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 rounded-2xl blur-lg group-hover:blur-xl transition-all opacity-0 group-hover:opacity-100" />
-                <div className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6 text-center hover:border-emerald-500/50 transition-all">
-                  <div className="text-4xl font-black text-transparent bg-gradient-to-br from-emerald-400 to-cyan-400 bg-clip-text mb-2">
-                    {stat.value}
-                  </div>
-                  <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{stat.label}</div>
-                </div>
+                
               </motion.div>
             ))}
           </motion.div>
@@ -201,31 +192,25 @@ export default function Landing() {
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: index * 0.1 }}
                   className="group relative"
-                  style={{ marginTop: index % 2 === 0 ? 0 : '2rem' }}
                 >
                   {/* Glow effect on hover */}
                   <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} rounded-3xl blur-xl opacity-0 group-hover:opacity-30 transition-all duration-500`} />
                   
                   <div className="relative bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 hover:border-white/30 transition-all h-full">
-                    {/* Icon with unique floating effect */}
+                    {/* Icon */}
                     <div className={`relative w-16 h-16 bg-gradient-to-br ${feature.color} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-2xl`}>
                       <div className="absolute inset-0 bg-white/20 rounded-2xl blur" />
                       <Icon className="relative w-8 h-8 text-white" strokeWidth={2.5} />
                     </div>
-                    
+
                     <h3 className="text-2xl font-bold text-white mb-3">{feature.title}</h3>
                     <p className="text-slate-400 leading-relaxed">{feature.description}</p>
-                    
-                    {/* Arrow indicator */}
-                    <div className="mt-4 inline-flex items-center gap-2 text-emerald-400 font-semibold text-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                      Explore
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </div>
                   </div>
                 </motion.div>
               );
             })}
           </div>
+
         </div>
       </div>
 
@@ -481,7 +466,7 @@ export default function Landing() {
               </div>
             </div>
             <div className="text-slate-400 text-sm">
-              © 2026 FinTellect. Your Financial Twin.
+              © Team M3R
             </div>
           </div>
         </div>
