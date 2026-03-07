@@ -189,8 +189,8 @@ const calculateResults = () => {
 
   const currentYear = new Date().getFullYear();
 
-  const startYearOptions = Array.from({ length: 9 }, (_, i) => {
-    const year = currentYear - (11 - i);
+  const startYearOptions = Array.from({ length: 10 }, (_, i) => {
+    const year = currentYear - (10 - i);
     const yearsAgo = currentYear - year;
     return {
       value: year.toString(),

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, Legend, XAxis, YAxis, Tooltip } from 'recharts';
 import { TrendingUp, AlertTriangle, CheckCircle, DollarSign, Shield, Zap, Target, Brain, Sparkles } from 'lucide-react';
 import { Link } from 'react-router';
@@ -53,6 +53,50 @@ export default function Dashboard() {
   const [totalSavings, setTotalSavings] = useState(324567);
   const [age, setAge] = useState(32);
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('moderate');
+
+  //local storage saving
+  useEffect(() => {
+    const saved = localStorage.getItem('fintellect-financial-inputs');
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+
+      if (typeof parsed.monthlyIncome === 'number') {
+        setMonthlyIncome(parsed.monthlyIncome);
+      }
+
+      if (typeof parsed.monthlyExpenses === 'number') {
+        setMonthlyExpenses(parsed.monthlyExpenses);
+      }
+
+      if (typeof parsed.totalSavings === 'number') {
+        setTotalSavings(parsed.totalSavings);
+      }
+
+      if (typeof parsed.age === 'number') {
+        setAge(parsed.age);
+      }
+
+      if (typeof parsed.riskProfile === 'string') {
+        setRiskProfile(parsed.riskProfile);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+    "fintellect.dashboard.inputs",
+    JSON.stringify({
+      monthlyIncome,
+      monthlyExpenses,
+      totalSavings,
+      age,
+      riskProfile
+    })
+  );
+}, [monthlyIncome, monthlyExpenses, totalSavings, age, riskProfile]);
+
 
   const derived = useMemo(() => {
     const assetData = riskAllocations[riskProfile];
