@@ -56,7 +56,7 @@ export default function Dashboard() {
 
   //local storage saving
   useEffect(() => {
-    const saved = localStorage.getItem('fintellect-financial-inputs');
+    const saved = localStorage.getItem('fintellect.dashboard.inputs');
     if (!saved) return;
 
     try {
