@@ -85,17 +85,17 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-  localStorage.setItem(
-    "fintellect.dashboard.inputs",
-    JSON.stringify({
-      monthlyIncome,
-      monthlyExpenses,
-      totalSavings,
-      age,
-      riskProfile
-    })
-  );
-}, [monthlyIncome, monthlyExpenses, totalSavings, age, riskProfile]);
+    localStorage.setItem(
+      'fintellect-financial-inputs',
+      JSON.stringify({
+        monthlyIncome,
+        monthlyExpenses,
+        totalSavings,
+        age,
+        riskProfile,
+      })
+    );
+  }, [monthlyIncome, monthlyExpenses, totalSavings, age, riskProfile]);
 
   const derived = useMemo(() => {
     const assetData = riskAllocations[riskProfile];
