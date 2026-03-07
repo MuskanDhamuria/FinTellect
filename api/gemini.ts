@@ -44,7 +44,7 @@ export default async function handler(req: any, res: any) {
     const systemInstruction =
       typeof body?.systemInstruction === 'string' && body.systemInstruction.trim().length > 0
         ? body.systemInstruction
-        : 'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty.';
+        : 'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty. Output plain text only. Do not use markdown symbols such as #, *, **, -, or backticks. Keep responses easy to scan using short paragraphs and numbered steps when useful.';
 
     const safeMessages: ChatMessage[] = inputMessages
       .filter((m: any) => (m?.type === 'user' || m?.type === 'ai') && typeof m?.content === 'string' && m.content.trim().length > 0)
@@ -95,3 +95,4 @@ export default async function handler(req: any, res: any) {
     });
   }
 }
+

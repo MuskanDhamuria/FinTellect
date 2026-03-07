@@ -9,7 +9,17 @@ interface Message {
 }
 
 const SYSTEM_INSTRUCTION =
-  'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty.';
+  'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty. Output plain text only. Do not use markdown symbols such as #, *, **, -, or backticks. Keep responses easy to scan using short paragraphs and numbered steps when useful.';
+
+const cleanAiText = (text: string): string =>
+  text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
 export default function AICopilot() {
   const [messages, setMessages] = useState<Message[]>([
@@ -67,7 +77,7 @@ export default function AICopilot() {
       throw new Error(errorMessage);
     }
 
-    const text = typeof data?.reply === 'string' ? data.reply.trim() : '';
+    const text = typeof data?.reply === 'string' ? cleanAiText(data.reply) : '';
     if (!text) {
       throw new Error('Gemini returned an empty response.');
     }
@@ -124,7 +134,7 @@ export default function AICopilot() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-black min-h-screen">
       <div className="mb-6">
         <h1 className="text-4xl font-bold text-white mb-3">AI Wealth Copilot</h1>
-        <p className="text-slate-400 text-lg">Ask anything about your financial future - get probability-based answers</p>
+        <p className="text-slate-400 text-lg">Ask anything about your financial future - powered by Gemini 3 Flash</p>
       </div>
 
       {messages.length === 1 && (
@@ -217,29 +227,6 @@ export default function AICopilot() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-        <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-            <span className="text-white font-medium text-sm">Probability-Based</span>
-          </div>
-          <p className="text-slate-400 text-xs">All answers include probability scores based on Monte Carlo simulations</p>
-        </div>
-        <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Bot className="w-4 h-4 text-cyan-400" />
-            <span className="text-white font-medium text-sm">Personalized</span>
-          </div>
-          <p className="text-slate-400 text-xs">Answers are tailored to your unique financial situation and goals</p>
-        </div>
-        <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <GraduationCap className="w-4 h-4 text-purple-400" />
-            <span className="text-white font-medium text-sm">Educational</span>
-          </div>
-          <p className="text-slate-400 text-xs">Learn financial concepts through practical, scenario-based advice</p>
-        </div>
-      </div>
     </div>
   );
 }

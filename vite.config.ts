@@ -38,7 +38,7 @@ const devGeminiApiPlugin = (env: Record<string, string>) => ({
         const systemInstruction =
           typeof body?.systemInstruction === 'string' && body.systemInstruction.trim().length > 0
             ? body.systemInstruction
-            : 'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty.';
+            : 'You are a concise financial copilot. Give practical, educational guidance and clearly state assumptions. Do not claim certainty. Output plain text only. Do not use markdown symbols such as #, *, **, -, or backticks. Keep responses easy to scan using short paragraphs and numbered steps when useful.';
 
         const contents = messages
           .filter((message: any) => (message?.type === 'user' || message?.type === 'ai') && typeof message?.content === 'string')
@@ -120,3 +120,4 @@ export default defineConfig(({ mode }) => {
     assetsInclude: ['**/*.svg', '**/*.csv'],
   };
 });
+
