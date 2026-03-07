@@ -6,6 +6,8 @@ import {
   Activity,
   ChevronRight,
   ShieldAlert,
+  Home,
+  Zap,
 } from 'lucide-react';
 import {
   BarChart,
@@ -21,17 +23,23 @@ import {
   Radar,
   Cell,
 } from 'recharts';
+import {
+  DASHBOARD_DEFAULTS,
+  getAllocationPercentages,
+  isRiskProfile,
+  normalizeDashboardInputs,
+  readBrowserLinkedInputs,
+  type DashboardInputs,
+  type RiskProfile,
+} from '../lib/linkedFinancialData';
 
-type ScenarioId = 'market-crash' | 'job-loss' | 'inflation-spike' | 'medical-emergency';
-type RiskProfile = 'conservative' | 'moderate' | 'aggressive';
-
-type DashboardInputs = {
-  monthlyIncome: number;
-  monthlyExpenses: number;
-  totalSavings: number;
-  age: number;
-  riskProfile: RiskProfile;
-};
+type ScenarioId =
+  | 'market-crash'
+  | 'job-loss'
+  | 'inflation-spike'
+  | 'medical-emergency'
+  | 'housing-crash'
+  | 'interest-hike';
 
 type FinancialProfile = {
   cash: number;
@@ -49,7 +57,7 @@ type ScenarioDefinition = {
   name: string;
   description: string;
   icon: ComponentType<{ className?: string }>;
-  impact: 'severe' | 'moderate';
+  impact: 'severe' | 'moderate' | 'mild';
   color: string;
 };
 
@@ -60,6 +68,7 @@ type StressResult = {
   monthlyIncome: number;
   monthlyBurn: number;
   survivalMonths: number;
+  isCashFlowPositive: boolean;
   resilienceScore: number;
   recoveryMonths: number;
   scoreBreakdown: {
@@ -106,44 +115,22 @@ const SCENARIOS: ScenarioDefinition[] = [
     impact: 'moderate',
     color: 'from-yellow-500 to-amber-600',
   },
-];
-
-const DASHBOARD_DEFAULTS: DashboardInputs = {
-  monthlyIncome: 8200,
-  monthlyExpenses: 3800,
-  totalSavings: 324567,
-  age: 32,
-  riskProfile: 'moderate',
-};
-
-const RISK_ALLOCATIONS: Record<RiskProfile, Record<'Stocks' | 'Bonds' | 'Real Estate' | 'Cash' | 'Crypto', number>> = {
-  conservative: {
-    Stocks: 25,
-    Bonds: 45,
-    'Real Estate': 15,
-    Cash: 13,
-    Crypto: 2,
+  {
+    id: 'housing-crash',
+    name: 'Housing Market Crash',
+    description: 'Real estate value -25%',
+    icon: Home,
+    impact: 'moderate',
+    color: 'from-purple-500 to-pink-600',
   },
-  moderate: {
-    Stocks: 45,
-    Bonds: 20,
-    'Real Estate': 15,
-    Cash: 12,
-    Crypto: 8,
+  {
+    id: 'interest-hike',
+    name: 'Interest Rate Hike',
+    description: 'Rates increase by 3%',
+    icon: Zap,
+    impact: 'mild', 
+    color: 'from-cyan-500 to-blue-600',
   },
-  aggressive: {
-    Stocks: 62,
-    Bonds: 10,
-    'Real Estate': 12,
-    Cash: 8,
-    Crypto: 8,
-  },
-};
-
-const DASHBOARD_STORAGE_KEY = 'fintellect.dashboard.inputs';
-
-const LINKED_INPUT_KEYS = [
-  DASHBOARD_STORAGE_KEY,
 ];
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -151,135 +138,8 @@ const round = (value: number) => Math.round(value * 10) / 10;
 const fmtCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 
-function isRiskProfile(value: unknown): value is RiskProfile {
-  return value === 'conservative' || value === 'moderate' || value === 'aggressive';
-}
-
-function normalizeDashboardInputs(partial?: Partial<DashboardInputs> | null): DashboardInputs {
-  return {
-    monthlyIncome: clamp(Number(partial?.monthlyIncome ?? DASHBOARD_DEFAULTS.monthlyIncome) || DASHBOARD_DEFAULTS.monthlyIncome, 0, 1_000_000_000),
-    monthlyExpenses: clamp(Number(partial?.monthlyExpenses ?? DASHBOARD_DEFAULTS.monthlyExpenses) || DASHBOARD_DEFAULTS.monthlyExpenses, 0, 1_000_000_000),
-    totalSavings: clamp(Number(partial?.totalSavings ?? DASHBOARD_DEFAULTS.totalSavings) || DASHBOARD_DEFAULTS.totalSavings, 0, 1_000_000_000),
-    age: clamp(Number(partial?.age ?? DASHBOARD_DEFAULTS.age) || DASHBOARD_DEFAULTS.age, 18, 90),
-    riskProfile: isRiskProfile(partial?.riskProfile) ? partial.riskProfile : DASHBOARD_DEFAULTS.riskProfile,
-  };
-}
-
-function extractDashboardInputs(value: unknown, depth = 0): Partial<DashboardInputs> | null {
-  if (!value || depth > 4) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    try {
-      return extractDashboardInputs(JSON.parse(value), depth + 1);
-    } catch {
-      return null;
-    }
-  }
-
-  if (typeof value !== 'object') {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const found: Partial<DashboardInputs> = {};
-
-  const numericMappings: Array<[keyof DashboardInputs, string[]]> = [
-    ['monthlyIncome', ['monthlyIncome', 'income', 'monthly_income']],
-    ['monthlyExpenses', ['monthlyExpenses', 'expenses', 'monthly_expenses']],
-    ['totalSavings', ['totalSavings', 'totalNetWorth', 'savings', 'netWorth', 'portfolioValue']],
-    ['age', ['age']],
-  ];
-
-  for (const [targetKey, possibleKeys] of numericMappings) {
-    const directKey = possibleKeys.find((key) => key in record);
-    if (directKey) {
-      const numericValue = Number(record[directKey]);
-      if (Number.isFinite(numericValue)) {
-        found[targetKey] = numericValue as never;
-      }
-    }
-  }
-
-  const profileCandidate = record.riskProfile ?? record.risk_profile ?? record.profile;
-  if (isRiskProfile(profileCandidate)) {
-    found.riskProfile = profileCandidate;
-  }
-
-  if (Object.keys(found).length > 0) {
-    return found;
-  }
-
-  for (const nested of Object.values(record)) {
-    const nestedInputs = extractDashboardInputs(nested, depth + 1);
-    if (nestedInputs) {
-      return nestedInputs;
-    }
-  }
-
-  return null;
-}
-
-function readBrowserLinkedInputs(): DashboardInputs {
-  if (typeof window === 'undefined') {
-    return DASHBOARD_DEFAULTS;
-  }
-
-  const merged: Partial<DashboardInputs> = {};
-  const apply = (value: unknown) => {
-    const next = extractDashboardInputs(value);
-    if (next) {
-      Object.assign(merged, next);
-    }
-  };
-
-  const searchParams = new URLSearchParams(window.location.search);
-  apply({
-    monthlyIncome: searchParams.get('monthlyIncome'),
-    monthlyExpenses: searchParams.get('monthlyExpenses'),
-    totalSavings: searchParams.get('totalSavings'),
-    age: searchParams.get('age'),
-    riskProfile: searchParams.get('riskProfile'),
-  });
-
-  apply(window.history.state);
-  apply(window.history.state?.usr);
-
-  for (const key of LINKED_INPUT_KEYS) {
-    apply(window.localStorage.getItem(key));
-    apply(window.sessionStorage.getItem(key));
-  }
-
-  const storageAreas = [window.localStorage, window.sessionStorage];
-  for (const storage of storageAreas) {
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      if (!key) {
-        continue;
-      }
-      if (LINKED_INPUT_KEYS.includes(key)) {
-        continue;
-      }
-      const lowerKey = key.toLowerCase();
-      if (
-        lowerKey.includes('income') ||
-        lowerKey.includes('expense') ||
-        lowerKey.includes('saving') ||
-        lowerKey.includes('worth') ||
-        lowerKey.includes('risk') ||
-        lowerKey.includes('dashboard')
-      ) {
-        apply(storage.getItem(key));
-      }
-    }
-  }
-
-  return normalizeDashboardInputs(merged);
-}
-
 function buildFinancialProfile(inputs: DashboardInputs): FinancialProfile {
-  const allocation = RISK_ALLOCATIONS[inputs.riskProfile];
+  const allocation = getAllocationPercentages(inputs);
   const amount = (percent: number) => round((inputs.totalSavings * percent) / 100);
 
   const totalCashBucket = amount(allocation.Cash);
@@ -304,9 +164,9 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
   let cash = profile.cash;
   let emergencyFund = profile.emergencyFund;
   let stocks = profile.stocks;
-  const bonds = profile.bonds;
-  const crypto = profile.crypto;
-  const otherAssets = profile.otherAssets;
+  let bonds = profile.bonds;
+  let crypto = profile.crypto;
+  let otherAssets = profile.otherAssets;
   let monthlyIncome = profile.monthlyIncome;
   let stressedMonthlyExpenses = profile.monthlyExpenses;
   let recoveryPenaltyMonths = 0;
@@ -318,38 +178,105 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
     recommendations.push('Reduce equity concentration by shifting a portion of stocks into bonds or cash reserves.');
   }
 
+  if (scenarioIds.includes('housing-crash')) {
+    otherAssets *= 0.75;
+    recoveryPenaltyMonths += 10;
+    recommendations.push(
+      'A housing downturn significantly impacts real estate exposure. Diversifying assets beyond property can reduce concentration risk.'
+    );
+  }
+
   if (scenarioIds.includes('job-loss')) {
-    monthlyIncome = 0;
+    const incomeGapMonths = 6;
+    const incomeShortfall = profile.monthlyIncome * incomeGapMonths;
+
+    let remainingShortfall = incomeShortfall;
+
+    const fromEmergencyFund = Math.min(emergencyFund, remainingShortfall);
+    emergencyFund -= fromEmergencyFund;
+    remainingShortfall -= fromEmergencyFund;
+
+    const fromCash = Math.min(cash, remainingShortfall);
+    cash -= fromCash;
+    remainingShortfall -= fromCash;
+
+    monthlyIncome = profile.monthlyIncome;
     recoveryPenaltyMonths += 6;
     recommendations.push('Increase liquidity so you can cover at least 6-12 months of expenses during income disruption.');
   }
 
   if (scenarioIds.includes('inflation-spike')) {
-    stressedMonthlyExpenses *= 1.05;
-    recoveryPenaltyMonths += 3;
-    recommendations.push('Protect cash flow from inflation by trimming discretionary spend and adding inflation-resistant assets.');
+    stressedMonthlyExpenses *= 1.08;
+    monthlyIncome *= 0.98;
+    cash *= 0.92;
+    emergencyFund *= 0.92;
+    bonds *= 0.94;
+    stocks *= 0.97;
+    otherAssets *= 1.02;
+
+    recoveryPenaltyMonths += 6;
+    recommendations.push(
+      'Inflation is eroding purchasing power. Reduce idle cash, control expense growth, and diversify into assets that historically hold value better in inflationary periods.'
+    );
+  }
+
+  if (scenarioIds.includes('interest-hike')) {
+    bonds *= 0.92;
+    stocks *= 0.97;
+    otherAssets *= 0.95;
+    cash *= 1.02;
+    stressedMonthlyExpenses *= 1.01;
+    recoveryPenaltyMonths += 4;
+    recommendations.push(
+      'Rising interest rates pressure bonds and housing. Consider shorter-duration bonds or diversified equity exposure.'
+    );
   }
 
   if (scenarioIds.includes('medical-emergency')) {
     const emergencyCost = 30_000;
-    const fromEmergencyFund = Math.min(emergencyFund, emergencyCost);
+    let remainingCost = emergencyCost;
+
+    const fromEmergencyFund = Math.min(emergencyFund, remainingCost);
     emergencyFund -= fromEmergencyFund;
-    const remainingAfterEmergencyFund = emergencyCost - fromEmergencyFund;
-    cash = Math.max(0, cash - remainingAfterEmergencyFund);
+    remainingCost -= fromEmergencyFund;
+
+    const fromCash = Math.min(cash, remainingCost);
+    cash -= fromCash;
+    remainingCost -= fromCash;
+
+    const fromBonds = Math.min(bonds, remainingCost);
+    bonds -= fromBonds;
+    remainingCost -= fromBonds;
+
+    const fromStocks = Math.min(stocks, remainingCost);
+    stocks -= fromStocks;
+    remainingCost -= fromStocks;
+
+    const fromCrypto = Math.min(crypto, remainingCost);
+    crypto -= fromCrypto;
+    remainingCost -= fromCrypto;
+
+    const fromOtherAssets = Math.min(otherAssets, remainingCost);
+    otherAssets -= fromOtherAssets;
+    remainingCost -= fromOtherAssets;
+
     recoveryPenaltyMonths += 4;
     recommendations.push('Keep dedicated health or contingency reserves so one emergency does not drain operating cash.');
   }
 
-  const totalCurrentNetWorth =
-    profile.cash + profile.emergencyFund + profile.stocks + profile.bonds + profile.crypto + profile.otherAssets;
+
+
+  const currentNetWorth = profile.cash + profile.emergencyFund + profile.stocks + profile.bonds + profile.crypto + profile.otherAssets;
 
   const liquidAssets = Math.max(0, cash + emergencyFund + bonds * 0.9 + stocks * 0.25 + crypto * 0.1);
   const postShockNetWorth = Math.max(0, cash + emergencyFund + stocks + bonds + crypto + otherAssets);
-  const monthlyBurn = Math.max(0, stressedMonthlyExpenses - monthlyIncome);
-  const survivalMonths = monthlyBurn === 0 ? 120 : liquidAssets / monthlyBurn;
+  const rawMonthlyBurn = stressedMonthlyExpenses - monthlyIncome;
+  const isCashFlowPositive = rawMonthlyBurn <= 0;
+  const monthlyBurn = Math.max(0, rawMonthlyBurn);
+  const survivalMonths = isCashFlowPositive ? 120 : liquidAssets / Math.max(rawMonthlyBurn, 1);
 
   const liquidityScore = clamp((survivalMonths / 12) * 100, 0, 100);
-  const solvencyScore = clamp((postShockNetWorth / Math.max(totalCurrentNetWorth, 1)) * 100, 0, 100);
+  const solvencyScore = clamp((postShockNetWorth / Math.max(currentNetWorth, 1)) * 100, 0, 100);
   const affordabilityScore = clamp((1 - monthlyBurn / Math.max(stressedMonthlyExpenses, 1)) * 100, 0, 100);
   const shockResistanceScore = clamp((liquidAssets / Math.max(profile.monthlyExpenses * 12, 1)) * 100, 0, 100);
   const preparednessScore = clamp(((profile.cash + profile.emergencyFund) / Math.max(profile.monthlyExpenses * 6, 1)) * 100, 0, 100);
@@ -362,14 +289,14 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
       preparednessScore * 0.15,
   );
 
-  const lostNetWorth = Math.max(0, totalCurrentNetWorth - postShockNetWorth);
+  const lostNetWorth = Math.max(0, currentNetWorth - postShockNetWorth);
   const rebuildCapacity = Math.max(profile.monthlyIncome - profile.monthlyExpenses, profile.monthlyIncome * 0.2, 1);
   const recoveryMonths = Math.max(1, Math.ceil(recoveryPenaltyMonths + lostNetWorth / rebuildCapacity));
 
   if (survivalMonths < 6) {
     recommendations.unshift('Your stressed survival time is under 6 months. Building liquid reserves is the highest-priority fix.');
   }
-  if (scenarioIds.includes('market-crash') && profile.stocks / Math.max(totalCurrentNetWorth, 1) > 0.55) {
+  if (scenarioIds.includes('market-crash') && profile.stocks / Math.max(currentNetWorth, 1) > 0.55) {
     recommendations.unshift('Your portfolio is equity-heavy. A -40% stock shock materially reduces resilience.');
   }
   if (scenarioIds.includes('job-loss') && profile.monthlyExpenses > profile.monthlyIncome * 0.65) {
@@ -386,6 +313,7 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
     monthlyIncome: round(monthlyIncome),
     monthlyBurn: round(monthlyBurn),
     survivalMonths: round(survivalMonths),
+    isCashFlowPositive,
     resilienceScore,
     recoveryMonths,
     scoreBreakdown: {
@@ -431,46 +359,97 @@ export default function StressTest() {
     };
   }, []);
 
-  useEffect(() => {
-  if (typeof window !== 'undefined') {
-    const latest = readBrowserLinkedInputs();
-    setDashboardInputs(latest);
-  }
-}, []);
 
   const profile = useMemo(() => buildFinancialProfile(dashboardInputs), [dashboardInputs]);
+  const totalCurrentNetWorth = useMemo(
+    () =>
+      profile.cash +
+      profile.emergencyFund +
+      profile.stocks +
+      profile.bonds +
+      profile.crypto +
+      profile.otherAssets,
+    [profile]
+  );
   const baseline = useMemo(() => calculateStressResult(profile, []), [profile]);
   const noIncomeBaselineMonths = useMemo(() => calculateNoIncomeSurvivalMonths(profile), [profile]);
   const combinedResult = useMemo(() => calculateStressResult(profile, selectedScenarios), [profile, selectedScenarios]);
   const survivalData = useMemo(() => buildScenarioSeries(profile), [profile]);
 
   const impactData = useMemo(() => {
-    const totalCurrentNetWorth =
-      profile.cash + profile.emergencyFund + profile.stocks + profile.bonds + profile.crypto + profile.otherAssets;
+    const buildRemainingMetric = (
+      metric: string,
+      currentValue: number,
+      stressedValue: number,
+      detail?: string
+    ) => {
+      const rawPercent = (stressedValue / Math.max(currentValue, 1)) * 100;
+
+      return {
+        metric,
+        current: 100,
+        afterStress: round(rawPercent),
+        displayPercent: clamp(round(rawPercent), 0, 100),
+        detail,
+      };
+    };
+
+    const buildTargetMetric = (
+      metric: string,
+      actualValue: number,
+      targetValue: number,
+      detail?: string
+    ) => {
+      const rawPercent = (actualValue / Math.max(targetValue, 1)) * 100;
+
+      return {
+        metric,
+        current: 100,
+        afterStress: round(rawPercent),
+        displayPercent: clamp(round(rawPercent), 0, 100),
+        detail,
+      };
+    };
 
     return [
-      {
-        metric: 'Net Worth',
-        current: 100,
-        afterStress: round((combinedResult.postShockNetWorth / Math.max(totalCurrentNetWorth, 1)) * 100),
-      },
-      {
-        metric: 'Liquidity',
-        current: 100,
-        afterStress: round((combinedResult.liquidAssets / Math.max(baseline.liquidAssets, 1)) * 100),
-      },
-      {
-        metric: 'Monthly Income',
-        current: 100,
-        afterStress: round((combinedResult.monthlyIncome / Math.max(dashboardInputs.monthlyIncome, 1)) * 100),
-      },
-      {
-        metric: 'Survival Buffer',
-        current: 100,
-        afterStress: round((combinedResult.survivalMonths / Math.max(noIncomeBaselineMonths, 1)) * 100),
-      },
+      buildRemainingMetric(
+        'Net Worth',
+        baseline.postShockNetWorth,
+        combinedResult.postShockNetWorth,
+        `${fmtCurrency(combinedResult.postShockNetWorth)} remaining`
+      ),
+      buildRemainingMetric(
+        'Liquidity',
+        baseline.liquidAssets,
+        combinedResult.liquidAssets,
+        `${fmtCurrency(combinedResult.liquidAssets)} liquid assets`
+      ),
+      buildRemainingMetric(
+        'Monthly Income',
+        baseline.monthlyIncome,
+        combinedResult.monthlyIncome,
+        combinedResult.monthlyIncome === 0
+          ? 'No income under this stress scenario'
+          : `${fmtCurrency(combinedResult.monthlyIncome)}/month`
+      ),
+      buildTargetMetric(
+        'Survival Buffer',
+        combinedResult.survivalMonths,
+        12,
+        combinedResult.survivalMonths >= 120
+          ? '120+ months (cash-flow positive)'
+          : `${combinedResult.survivalMonths} months vs 12-month target`
+      ),
     ];
-  }, [baseline.liquidAssets, combinedResult, dashboardInputs.monthlyIncome, noIncomeBaselineMonths, profile]);
+  }, [
+    baseline.liquidAssets,
+    baseline.monthlyIncome,
+    baseline.postShockNetWorth,
+    combinedResult.liquidAssets,
+    combinedResult.monthlyIncome,
+    combinedResult.postShockNetWorth,
+    combinedResult.survivalMonths,
+  ]);
 
   const resilienceData = useMemo(
     () => [
@@ -612,7 +591,7 @@ export default function StressTest() {
       <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 mb-8">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-2xl font-bold text-white">Derived Allocation</h2>
-          <span className="text-sm text-slate-400">Auto-built from risk profile and total net worth</span>
+          <span className="text-sm text-slate-400">Built from the same dashboard allocation percentages and total net worth</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           {allocationRows.map(([label, value]) => (
@@ -658,8 +637,10 @@ export default function StressTest() {
                           isSelected
                             ? 'bg-white/20 text-white'
                             : scenario.impact === 'severe'
-                              ? 'bg-red-500/20 text-red-400'
-                              : 'bg-amber-500/20 text-amber-400'
+                            ? 'bg-red-500/20 text-red-400'
+                            : scenario.impact === 'moderate'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-cyan-500/20 text-cyan-400'
                         }`}
                       >
                         {scenario.impact.toUpperCase()} IMPACT
@@ -709,8 +690,14 @@ export default function StressTest() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <div className="text-slate-300 text-sm mb-2">Financial Survival Time</div>
-                <div className="text-5xl font-bold text-white mb-1">{combinedResult.survivalMonths} months</div>
-                <div className="text-red-400 text-sm">Based on liquid assets / stressed monthly burn</div>
+                <div className="text-5xl font-bold text-white mb-1">
+                  {combinedResult.isCashFlowPositive ? '120+ months' : `${combinedResult.survivalMonths} months`}
+                </div>
+                <div className="text-red-400 text-sm">
+                  {combinedResult.isCashFlowPositive
+                    ? 'Cash-flow positive under this scenario'
+                    : 'Based on liquid assets / stressed monthly burn'}
+                </div>
               </div>
               <div>
                 <div className="text-slate-300 text-sm mb-2">Stress Test Score</div>
@@ -775,22 +762,38 @@ export default function StressTest() {
             <h3 className="text-xl font-bold text-white mb-4">Impact Analysis</h3>
             <div className="space-y-4">
               {impactData.map((item) => (
-                <div key={item.metric}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-slate-300">{item.metric}</span>
-                    <span className="text-white font-medium">{item.afterStress}% remaining</span>
-                  </div>
-                  <div className="relative w-full bg-slate-700/50 rounded-full h-3">
-                    <div className="absolute h-3 bg-slate-600 rounded-full" style={{ width: `${item.current}%` }} />
-                    <div
-                      className={`absolute h-3 rounded-full ${
-                        item.afterStress > 60 ? 'bg-emerald-500' : item.afterStress > 30 ? 'bg-amber-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${item.afterStress}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+  <div key={item.metric}>
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-slate-300">{item.metric}</span>
+      <span className="text-white font-medium">
+        {item.afterStress > 100 ? '100%+' : `${item.afterStress}%`} remaining
+      </span>
+    </div>
+
+    <div className="relative w-full bg-slate-700/50 rounded-full h-3">
+      <div
+        className="absolute h-3 bg-slate-600 rounded-full"
+        style={{ width: `${item.current}%` }}
+      />
+      <div
+        className={`absolute h-3 rounded-full ${
+          item.afterStress > 60
+            ? 'bg-emerald-500'
+            : item.afterStress > 30
+            ? 'bg-amber-500'
+            : 'bg-red-500'
+        }`}
+        style={{ width: `${item.displayPercent}%` }}
+      />
+    </div>
+
+    {item.detail && (
+      <div className="mt-1 text-xs text-slate-400">
+        {item.detail}
+      </div>
+    )}
+  </div>
+))}
             </div>
           </div>
 
@@ -800,7 +803,15 @@ export default function StressTest() {
               <div className="space-y-3 text-slate-300 text-sm leading-6">
                 <p>
                   <ShieldAlert className="inline w-4 h-4 mr-2 text-amber-400" />
-                  Market crash applies <strong className="text-white">stocks -40%</strong>.
+                  Market crash applies <strong className="text-white">-40% to the stock allocation currently shown on the dashboard</strong>.
+                </p>
+                <p>
+                  <ShieldAlert className="inline w-4 h-4 mr-2 text-amber-400" />
+                  Housing crash applies <strong className="text-white">-25% to the real estate allocation</strong>.
+                </p>
+                <p>
+                  <ShieldAlert className="inline w-4 h-4 mr-2 text-amber-400" />
+                  Interest rate hike reduces <strong className="text-white">bond and housing values while slightly increasing cash returns</strong>.
                 </p>
                 <p>
                   <ShieldAlert className="inline w-4 h-4 mr-2 text-amber-400" />
