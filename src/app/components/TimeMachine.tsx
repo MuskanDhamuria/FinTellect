@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, 
 
 export default function TimeMachine() {
   const [startingPortfolio, setStartingPortfolio] = useState(10000);
-  const [startYear, setStartYear] = useState('2020');
+  const [startYear, setStartYear] = useState('');
   const [monthlyInvestment, setMonthlyInvestment] = useState(500);
   const [investmentChoice, setInvestmentChoice] = useState('sp500');
   const [showResults, setShowResults] = useState(false);
@@ -103,15 +103,22 @@ const investmentHistory = {
 
 // Calculate what-if scenario
 const calculateResults = () => {
+  if (!startYear) return null;
   const start = parseInt(startYear);
   const end = 2025;
-  let totalValue = 0;
-  let totalInvested = 0;
 
-  const selectedHistory = investmentHistory[investmentChoice as keyof typeof investmentHistory];
+  let totalValue = startingPortfolio;
+  let totalInvested = startingPortfolio;
+
+  const selectedHistory =
+    investmentHistory[investmentChoice as keyof typeof investmentHistory];
 
   for (let year = start; year <= end; year++) {
-    const annualReturn = selectedHistory.yearlyReturns[year as keyof typeof selectedHistory.yearlyReturns] ?? 0;
+    const annualReturn =
+      selectedHistory.yearlyReturns[
+        year as keyof typeof selectedHistory.yearlyReturns
+      ] ?? 0;
+
     const monthlyReturn = annualReturn / 100 / 12;
 
     for (let month = 0; month < 12; month++) {
@@ -122,8 +129,9 @@ const calculateResults = () => {
 
   const returns = totalValue - totalInvested;
   const years = end - start + 1;
+  const roi = totalInvested > 0 ? (returns / totalInvested) * 100 : 0;
 
-  return { totalValue, totalInvested, returns, years };
+  return { totalValue, totalInvested, returns, years, roi };
 };
 
   const results = showResults ? calculateResults() : null;
@@ -189,7 +197,7 @@ const calculateResults = () => {
 
   const currentYear = new Date().getFullYear();
 
-  const startYearOptions = Array.from({ length: 10 }, (_, i) => {
+  const startYearOptions = Array.from({ length: 9 }, (_, i) => {
     const year = currentYear - (10 - i);
     const yearsAgo = currentYear - year;
     return {
@@ -248,6 +256,10 @@ const calculateResults = () => {
                 }}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
+                <option value="" disabled>
+                  -- Select Start Year -- 
+                </option>
+
                 {startYearOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -265,7 +277,7 @@ const calculateResults = () => {
               <input
                 type="range"
                 min="100"
-                max="5000"
+                max="3000"
                 step="100"
                 value={monthlyInvestment}
                 onChange={(e) => setMonthlyInvestment(parseInt(e.target.value))}
@@ -274,7 +286,7 @@ const calculateResults = () => {
               <div className="flex items-center justify-between mt-2">
                 <span className="text-slate-400 text-sm">$100</span>
                 <span className="text-white font-bold text-lg">${monthlyInvestment}/month</span>
-                <span className="text-slate-400 text-sm">$5,000</span>
+                <span className="text-slate-400 text-sm">$3,000</span>
               </div>
             </div>
 
@@ -316,29 +328,29 @@ const calculateResults = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-3">
-              <button
-  onClick={() => {
-    const { comparisonData: newComparisonData, yearlyData: newYearlyData } = generateChartData();
-    setComparisonData(newComparisonData);
-    setYearlyComparison(newYearlyData);
-    setShowResults(true);
-  }}
-  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:shadow-lg hover:shadow-emerald-500/50 transition-all font-medium"
->
-  <Play className="w-5 h-5" />
-  Run Simulation
-</button>
+            <button
+              disabled={!startYear}
+              onClick={() => {
+                const { comparisonData: newComparisonData, yearlyData: newYearlyData } = generateChartData();
+                setComparisonData(newComparisonData);
+                setYearlyComparison(newYearlyData);
+                setShowResults(true);
+              }}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:shadow-lg hover:shadow-emerald-500/50 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Play className="w-5 h-5" />
+              Run Simulation
+            </button>
               {showResults && (
                 <button
-  onClick={() => {
-    setStartYear('2020');
-    setMonthlyInvestment(500);
-    setInvestmentChoice('sp500');
-    setShowResults(false);
-    setComparisonData([]);
-    setYearlyComparison([]);
-}
-
+                onClick={() => {
+                  setStartYear('2020');
+                  setMonthlyInvestment(500);
+                  setInvestmentChoice('sp500');
+                  setShowResults(false);
+                  setComparisonData([]);
+                  setYearlyComparison([]);
+              }
 }
 
                   className="px-4 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
