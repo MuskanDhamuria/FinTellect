@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, DollarSign, Target, Play, RotateCcw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 
@@ -7,6 +7,12 @@ export default function TimeMachine() {
   const [monthlyInvestment, setMonthlyInvestment] = useState(500);
   const [investmentChoice, setInvestmentChoice] = useState('sp500');
   const [showResults, setShowResults] = useState(false);
+  const [comparisonData, setComparisonData] = useState<any[]>([]);
+  const [simulationResults, setSimulationResults] = useState<any>(null);
+  const [yearlyComparison, setYearlyComparison] = useState<any[]>([]);
+  const volatilityPattern = [1.12, 0.92, 1.18, 0.87, 1.05, 0.96, 1.15, 0.9];
+  const finalActualPortfolio = comparisonData[comparisonData.length - 1]?.actual ?? 0;
+  const finalWhatIfPortfolio = comparisonData[comparisonData.length - 1]?.whatIf ?? 0;
 
   const investments = [
     { id: 'sp500', name: 'S&P 500', avgReturn: 10.5, color: '#10b981' },
@@ -16,46 +22,76 @@ export default function TimeMachine() {
     { id: 'realestate', name: 'Real Estate ETF', avgReturn: 8.5, color: '#8b5cf6' },
   ];
 
-  // Calculate what-if scenario
-  const calculateResults = () => {
-    const years = 2025 - parseInt(startYear);
-    const selected = investments.find((i) => i.id === investmentChoice);
-    
-    // Simple compound interest calculation
-    const monthlyReturn = selected!.avgReturn / 100 / 12;
-    const months = years * 12;
-    let totalValue = 0;
-    
-    for (let i = 0; i < months; i++) {
-      totalValue = (totalValue + monthlyInvestment) * (1 + monthlyReturn);
-    }
-    
-    const totalInvested = monthlyInvestment * months;
-    const returns = totalValue - totalInvested;
-    
-    return { totalValue, totalInvested, returns, years };
-  };
+
+// Calculate what-if scenario
+const calculateResults = () => {
+  const years = 2025 - parseInt(startYear);
+  const selected = investments.find((i) => i.id === investmentChoice);
+  
+  // Simple compound interest calculation
+  const monthlyReturn = selected!.avgReturn / 100 / 12;
+  const months = years * 12;
+  let totalValue = 0;
+  
+  for (let i = 0; i < months; i++) {
+    totalValue = (totalValue + monthlyInvestment) * (1 + monthlyReturn);
+  }
+  
+  const totalInvested = monthlyInvestment * months;
+  const returns = totalValue - totalInvested;
+  
+  return { totalValue, totalInvested, returns, years };
+};
 
   const results = showResults ? calculateResults() : null;
+const difference = finalWhatIfPortfolio - finalActualPortfolio;
 
-  // Historical comparison data
-  const comparisonData = [
-    { year: '2020', actual: 14500, whatIf: 6000 },
-    { year: '2021', actual: 18200, whatIf: 14500 },
-    { year: '2022', actual: 16800, whatIf: 22800 },
-    { year: '2023', actual: 22400, whatIf: 32200 },
-    { year: '2024', actual: 29000, whatIf: 43100 },
-    { year: '2025', actual: 29000, whatIf: 55600 },
-  ];
+  // Generate chart data based on current inputs
+const generateChartData = () => {
+  const years = 2025 - parseInt(startYear);
+  const selected = investments.find((i) => i.id === investmentChoice);
+  const monthlyReturn = selected!.avgReturn / 100 / 12;
+  
+  const newComparisonData = [];
+  const newYearlyData = [];
+  
+let actualPortfolio = 5000;
+let previousPortfolio = actualPortfolio;
+let whatIfPortfolio = 0;
+  
+  for (let year = parseInt(startYear); year <= 2025; year++) {
+    // What-if calculation with monthly contributions
+    if (year > parseInt(startYear)) {
+      for (let month = 0; month < 12; month++) {
+        whatIfPortfolio = (whatIfPortfolio + monthlyInvestment) * (1 + monthlyReturn);
+      }
+    }
+    
+const volatility = volatilityPattern[year % volatilityPattern.length];
+const yearReturn = (selected!.avgReturn * volatility) / 100;
+previousPortfolio = actualPortfolio;
+actualPortfolio = actualPortfolio * (1 + yearReturn);
+    
+    newComparisonData.push({
+      year: year.toString(),
+      actual: Math.round(actualPortfolio),
+      whatIf: Math.round(whatIfPortfolio),
+    });
 
-  // Year-over-year comparison
-  const yearlyComparison = [
-    { year: '2020', returns: 12.5 },
-    { year: '2021', returns: 18.4 },
-    { year: '2022', returns: -8.2 },
-    { year: '2023', returns: 24.1 },
-    { year: '2024', returns: 22.8 },
-  ];
+   if (year > parseInt(startYear)) {
+  
+  // Year-over-year opportunity (%)
+const opportunityYoY = ((whatIfPortfolio - actualPortfolio) / whatIfPortfolio) * 100;
+
+newYearlyData.push({
+  year: year.toString(),
+  returns: Number(opportunityYoY.toFixed(1)), // round to 1 decimal
+});
+}
+  }
+  
+  return { comparisonData: newComparisonData, yearlyData: newYearlyData };
+};
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-black min-h-screen">
@@ -81,7 +117,10 @@ export default function TimeMachine() {
               </label>
               <select
                 value={startYear}
-                onChange={(e) => setStartYear(e.target.value)}
+                onChange={(e) => {
+  setStartYear(e.target.value);
+  setShowResults(false);
+}}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               >
                 <option value="2015">2015 (10 years ago)</option>
@@ -121,42 +160,58 @@ export default function TimeMachine() {
               </label>
               <div className="space-y-2">
                 {investments.map((inv) => (
-                  <button
-                    key={inv.id}
-                    onClick={() => setInvestmentChoice(inv.id)}
-                    className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
-                      investmentChoice === inv.id
-                        ? 'bg-emerald-500/20 border-2 border-emerald-500'
-                        : 'bg-slate-700/50 border-2 border-transparent hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: inv.color }}
-                      />
-                      <span className="text-white font-medium">{inv.name}</span>
-                    </div>
-                    <span className="text-emerald-400 text-sm font-medium">
-                      {inv.avgReturn}% avg
-                    </span>
-                  </button>
-                ))}
+  <button
+    key={inv.id}
+    onClick={() => {
+      setInvestmentChoice(inv.id);
+
+      // Only update chart if simulation has already been run once
+      if (showResults) {
+        const { comparisonData: newComparisonData, yearlyData: newYearlyData } = generateChartData();
+        setComparisonData(newComparisonData);
+        setYearlyComparison(newYearlyData);
+      }
+    }}
+    className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
+      investmentChoice === inv.id
+        ? 'bg-emerald-500/20 border-2 border-emerald-500'
+        : 'bg-slate-700/50 border-2 border-transparent hover:border-slate-600'
+    }`}
+  >
+    <div className="flex items-center gap-3">
+      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: inv.color }} />
+      <span className="text-white font-medium">{inv.name}</span>
+    </div>
+    <span className="text-emerald-400 text-sm font-medium">{inv.avgReturn}% avg</span>
+  </button>
+))}
               </div>
             </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3">
               <button
-                onClick={() => setShowResults(true)}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:shadow-lg hover:shadow-emerald-500/50 transition-all font-medium"
-              >
-                <Play className="w-5 h-5" />
-                Run Simulation
-              </button>
+  onClick={() => {
+    const { comparisonData: newComparisonData, yearlyData: newYearlyData } = generateChartData();
+    setComparisonData(newComparisonData);
+    setYearlyComparison(newYearlyData);
+    setShowResults(true);
+  }}
+  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:shadow-lg hover:shadow-emerald-500/50 transition-all font-medium"
+>
+  <Play className="w-5 h-5" />
+  Run Simulation
+</button>
               {showResults && (
                 <button
-                  onClick={() => setShowResults(false)}
+  onClick={() => {
+    setStartYear('2020');
+    setMonthlyInvestment(500);
+    setInvestmentChoice('sp500');
+    setShowResults(false);
+    setComparisonData([]);
+    setYearlyComparison([]);
+}}
                   className="px-4 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -169,18 +224,33 @@ export default function TimeMachine() {
           <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
             <h3 className="text-lg font-bold text-white mb-4">Your Current Portfolio</h3>
             <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Current Value</span>
-                <span className="text-white font-medium">$29,000</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Total Invested</span>
-                <span className="text-white font-medium">$24,500</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Total Returns</span>
-                <span className="text-emerald-400 font-medium">+$4,500 (18%)</span>
-              </div>
+              {results && (
+  <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+    <h3 className="text-lg font-bold text-white mb-4">Your Current Portfolio</h3>
+    <div className="space-y-3">
+      <div className="flex justify-between">
+        <span className="text-slate-400">Current Value</span>
+        <span className="text-white font-medium">
+          ${results.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+        </span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Total Invested</span>
+        <span className="text-white font-medium">
+          ${results.totalInvested.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+        </span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Total Returns</span>
+        <span className="text-emerald-400 font-medium">
+          +${results.returns.toLocaleString('en-US', { maximumFractionDigits: 0 })} (
+          {((results.returns / results.totalInvested) * 100).toFixed(1)}%
+          )
+        </span>
+      </div>
+    </div>
+  </div>
+)}
             </div>
           </div>
         </div>
@@ -230,14 +300,16 @@ export default function TimeMachine() {
                     <div>
                       <div className="text-white font-medium mb-1">Opportunity Analysis</div>
                       <p className="text-slate-300 text-sm">
-                        If you had invested ${monthlyInvestment}/month in {investments.find(i => i.id === investmentChoice)!.name} since {startYear},
-                        your portfolio would be worth <span className="text-emerald-400 font-bold">
-                          ${results!.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                        </span> instead of $29,000 — a difference of{' '}
-                        <span className="text-cyan-400 font-bold">
-                          ${(results!.totalValue - 29000).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                        </span>!
-                      </p>
+  If you had invested ${monthlyInvestment}/month in {investments.find(i => i.id === investmentChoice)!.name} since {startYear},
+  your portfolio would be worth <span className="text-emerald-400 font-bold">
+  ${finalWhatIfPortfolio.toLocaleString()}
+</span> instead of <span className="text-white font-bold">
+  ${finalActualPortfolio.toLocaleString()}
+</span> — a difference of{' '}
+<span className="text-cyan-400 font-bold">
+  ${difference.toLocaleString()}
+</span>!
+</p>
                     </div>
                   </div>
                 </div>
