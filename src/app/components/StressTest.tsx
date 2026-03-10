@@ -591,7 +591,7 @@ export default function StressTest() {
             </div>
             <div>
               <div className="text-slate-400 text-sm">Survival Time if Income Stops</div>
-              <div className="text-3xl font-bold text-emerald-400">{noIncomeBaselineMonths} months</div>
+              <div className="text-3xl font-bold text-emerald-400">{combinedResult.isCashFlowPositive ? '120+ months' : `${combinedResult.survivalMonths} months`}</div>
             </div>
           </div>
         </div>
