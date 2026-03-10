@@ -293,8 +293,26 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
   const rebuildCapacity = Math.max(profile.monthlyIncome - profile.monthlyExpenses, profile.monthlyIncome * 0.2, 1);
   const recoveryMonths = Math.max(1, Math.ceil(recoveryPenaltyMonths + lostNetWorth / rebuildCapacity));
 
+  const isJobLossUnderSixMonths =
+    scenarioIds.includes('job-loss') && survivalMonths < 6;
+
+  const finalStressTestScore = isJobLossUnderSixMonths ? 100 : resilienceScore;
+
+  let finalPostShockNetWorth = postShockNetWorth;
+  let finalLiquidAssets = liquidAssets;
+
+  if (isJobLossUnderSixMonths) {
+    finalLiquidAssets = 0;
+    finalPostShockNetWorth = -Math.max(profile.monthlyExpenses * 6 - liquidAssets, 1);
+  }
+
   if (survivalMonths < 6) {
     recommendations.unshift('Your stressed survival time is under 6 months. Building liquid reserves is the highest-priority fix.');
+  }
+  if (isJobLossUnderSixMonths) {
+    recommendations.unshift(
+      'This job-loss scenario results in less than 6 months of survival, so the stress test is treated as a debt outcome.'
+    );
   }
   if (scenarioIds.includes('market-crash') && profile.stocks / Math.max(currentNetWorth, 1) > 0.55) {
     recommendations.unshift('Your portfolio is equity-heavy. A -40% stock shock materially reduces resilience.');
@@ -307,14 +325,14 @@ function calculateStressResult(profile: FinancialProfile, scenarioIds: ScenarioI
   }
 
   return {
-    postShockNetWorth: round(postShockNetWorth),
-    liquidAssets: round(liquidAssets),
+     postShockNetWorth: round(finalPostShockNetWorth),
+    liquidAssets: round(finalLiquidAssets),
     stressedMonthlyExpenses: round(stressedMonthlyExpenses),
     monthlyIncome: round(monthlyIncome),
     monthlyBurn: round(monthlyBurn),
     survivalMonths: round(survivalMonths),
     isCashFlowPositive,
-    resilienceScore,
+    resilienceScore: finalStressTestScore,
     recoveryMonths,
     scoreBreakdown: {
       liquidity: round(liquidityScore),
@@ -711,12 +729,22 @@ export default function StressTest() {
               <div>
                 <div className="text-slate-300 text-sm mb-2">Stress Test Score</div>
                 <div className="text-5xl font-bold text-white mb-1">{combinedResult.resilienceScore}/100</div>
-                <div className="text-amber-300 text-sm">Holistic resilience under shock</div>
+                <div className="text-amber-300 text-sm">
+                  {selectedScenarios.includes('job-loss') && combinedResult.survivalMonths < 6
+                    ? 'Forced to 100 due to severe job-loss failure state'
+                    : 'Holistic resilience under shock'}
+                </div>
               </div>
               <div>
                 <div className="text-slate-300 text-sm mb-2">Net Worth After Stress</div>
-                <div className="text-5xl font-bold text-white mb-1">{Math.round(((combinedResult.postShockNetWorth / baseline.postShockNetWorth) * 100) || 0)}%</div>
-                <div className="text-red-400 text-sm">{fmtCurrency(combinedResult.postShockNetWorth)} remaining</div>
+                <div className="text-5xl font-bold text-white mb-1">
+                  {Math.round(((combinedResult.postShockNetWorth / Math.max(baseline.postShockNetWorth, 1)) * 100) || 0)}%
+                </div>
+                <div className="text-red-400 text-sm">
+                  {combinedResult.postShockNetWorth < 0
+                    ? `${fmtCurrency(Math.abs(combinedResult.postShockNetWorth))} in debt`
+                    : `${fmtCurrency(combinedResult.postShockNetWorth)} remaining`}
+                </div>
               </div>
               <div>
                 <div className="text-slate-300 text-sm mb-2">Recovery Time</div>
