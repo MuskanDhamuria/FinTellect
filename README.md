@@ -1,4 +1,6 @@
-# FinTellect — Financial Health Operating System
+# FinTellect — Financial Health Operating System 
+
+# Link to deployed site: https://fin-tellect.vercel.app/ 
 
 ---
 
