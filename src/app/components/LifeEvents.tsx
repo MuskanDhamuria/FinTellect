@@ -1,9 +1,157 @@
 import { useState } from 'react';
 import { Baby, Heart, GraduationCap, Home, Plane, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
+import { useEffect, useMemo } from 'react';
+
+type RiskProfile = 'conservative' | 'moderate' | 'aggressive';
+
+type FinancialInputs = {
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  totalSavings: number;
+  age: number;
+  riskProfile: RiskProfile;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const defaultInputs: FinancialInputs = {
+  monthlyIncome: 8200,
+  monthlyExpenses: 3800,
+  totalSavings: 324567,
+  age: 32,
+  riskProfile: 'moderate',
+};
+
+function getDashboardInputs(): FinancialInputs {
+  try {
+    const saved = localStorage.getItem('fintellect.dashboard.inputs');
+    if (!saved) return defaultInputs;
+
+    const parsed = JSON.parse(saved);
+
+    return {
+      monthlyIncome: typeof parsed.monthlyIncome === 'number' ? parsed.monthlyIncome : defaultInputs.monthlyIncome,
+      monthlyExpenses: typeof parsed.monthlyExpenses === 'number' ? parsed.monthlyExpenses : defaultInputs.monthlyExpenses,
+      totalSavings: typeof parsed.totalSavings === 'number' ? parsed.totalSavings : defaultInputs.totalSavings,
+      age: typeof parsed.age === 'number' ? parsed.age : defaultInputs.age,
+      riskProfile:
+        parsed.riskProfile === 'conservative' ||
+        parsed.riskProfile === 'moderate' ||
+        parsed.riskProfile === 'aggressive'
+          ? parsed.riskProfile
+          : defaultInputs.riskProfile,
+    };
+  } catch {
+    return defaultInputs;
+  }
+}
+
+function getRiskFitScore(eventId: string, riskProfile: RiskProfile) {
+  const scores: Record<string, Record<RiskProfile, number>> = {
+    child: {
+      conservative: 90,
+      moderate: 75,
+      aggressive: 60,
+    },
+    marriage: {
+      conservative: 85,
+      moderate: 85,
+      aggressive: 85,
+    },
+    education: {
+      conservative: 75,
+      moderate: 85,
+      aggressive: 80,
+    },
+    house: {
+      conservative: 90,
+      moderate: 80,
+      aggressive: 65,
+    },
+    'career-change': {
+      conservative: 70,
+      moderate: 85,
+      aggressive: 80,
+    },
+    retirement: {
+      conservative: 80,
+      moderate: 90,
+      aggressive: 70,
+    },
+  };
+
+  return scores[eventId]?.[riskProfile] ?? 75;
+}
+
+function calculateReadiness(
+  event: {
+    id: string;
+    upfrontCost: number;
+    annualCost: number;
+    yearsToFund: number;
+    totalCost: number;
+  },
+  inputs: FinancialInputs
+) {
+  const monthlyCashFlow = inputs.monthlyIncome - inputs.monthlyExpenses;
+  const annualFreeCashFlow = Math.max(0, monthlyCashFlow * 12);
+  const survivalMonths =
+    inputs.monthlyExpenses > 0 ? inputs.totalSavings / inputs.monthlyExpenses : 0;
+
+  const upfrontScore =
+    event.upfrontCost > 0
+      ? clamp((inputs.totalSavings / event.upfrontCost) * 100, 0, 100)
+      : 100;
+
+  const requiredAnnualSaving = event.totalCost / Math.max(event.yearsToFund, 1);
+  const cashFlowScore =
+    requiredAnnualSaving > 0
+      ? clamp((annualFreeCashFlow / requiredAnnualSaving) * 100, 0, 100)
+      : 100;
+
+  const bufferScore = clamp((survivalMonths / 6) * 100, 0, 100);
+
+  const riskFitScore = getRiskFitScore(event.id, inputs.riskProfile);
+
+  const readiness = Math.round(
+    upfrontScore * 0.4 +
+    cashFlowScore * 0.3 +
+    bufferScore * 0.2 +
+    riskFitScore * 0.1
+  );
+
+  return {
+    monthlyCashFlow,
+    annualFreeCashFlow,
+    survivalMonths,
+    requiredAnnualSaving,
+    readiness: clamp(readiness, 0, 100),
+    impact: {
+      netWorth:
+        inputs.totalSavings > 0
+          ? -Math.round((Math.min(event.upfrontCost, inputs.totalSavings) / inputs.totalSavings) * 100)
+          : 0,
+      cashFlow:
+        inputs.monthlyIncome > 0
+          ? -Math.round((event.annualCost / 12 / inputs.monthlyIncome) * 100)
+          : 0,
+      savingsRate:
+        annualFreeCashFlow > 0
+          ? -Math.round((event.annualCost / annualFreeCashFlow) * 100)
+          : -100,
+    },
+  };
+}
 
 export default function LifeEvents() {
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
+  const [inputs, setInputs] = useState<FinancialInputs>(defaultInputs);
+
+  useEffect(() => {
+    setInputs(getDashboardInputs());
+  }, []);
 
   const lifeEvents = [
     {
@@ -13,6 +161,9 @@ export default function LifeEvents() {
       color: 'from-pink-500 to-rose-500',
       timeline: '0-18 years',
       totalCost: 310000,
+      upfrontCost: 6300,
+      annualCost: 16872,
+      yearsToFund: 1,
     },
     {
       id: 'marriage',
@@ -21,6 +172,9 @@ export default function LifeEvents() {
       color: 'from-red-500 to-pink-500',
       timeline: '1 year',
       totalCost: 35000,
+      upfrontCost: 35000,
+      annualCost: 0,
+      yearsToFund: 1,
     },
     {
       id: 'education',
@@ -29,6 +183,9 @@ export default function LifeEvents() {
       color: 'from-purple-500 to-violet-500',
       timeline: '2-4 years',
       totalCost: 85000,
+      upfrontCost: 15000,
+      annualCost: 23333,
+      yearsToFund: 3,
     },
     {
       id: 'house',
@@ -37,6 +194,9 @@ export default function LifeEvents() {
       color: 'from-blue-500 to-cyan-500',
       timeline: '30 years',
       totalCost: 500000,
+      upfrontCost: 115000,
+      annualCost: 43800,
+      yearsToFund: 5,
     },
     {
       id: 'career-change',
@@ -45,6 +205,9 @@ export default function LifeEvents() {
       color: 'from-amber-500 to-orange-500',
       timeline: '6-12 months',
       totalCost: 45000,
+      upfrontCost: 15000,
+      annualCost: 30000,
+      yearsToFund: 1,
     },
     {
       id: 'retirement',
@@ -53,6 +216,9 @@ export default function LifeEvents() {
       color: 'from-emerald-500 to-green-500',
       timeline: '20+ years',
       totalCost: 1800000,
+      upfrontCost: 0,
+      annualCost: 90000,
+      yearsToFund: 20,
     },
   ];
 
@@ -168,9 +334,16 @@ export default function LifeEvents() {
     }
   };
 
-  const selectedEventData = selectedEvent ? getEventDetails(selectedEvent) : null;
-  const selectedEventInfo = selectedEvent ? lifeEvents.find((e) => e.id === selectedEvent) : null;
+  const selectedEventInfo = selectedEvent
+    ? lifeEvents.find((e) => e.id === selectedEvent)
+    : null;
 
+  const selectedEventBaseData = selectedEvent ? getEventDetails(selectedEvent) : null;
+  const selectedEventComputed =
+    selectedEventInfo ? calculateReadiness(selectedEventInfo, inputs) : null;
+  
+  selectedEventComputed?.readiness
+    
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-black min-h-screen">
       {/* Header */}
@@ -223,21 +396,21 @@ export default function LifeEvents() {
       </div>
 
       {/* Detailed Analysis */}
-      {selectedEvent && selectedEventData && selectedEventInfo && (
+      {selectedEvent && selectedEventBaseData && selectedEventInfo && selectedEventComputed && (
         <div className="space-y-6">
           {/* Readiness Score */}
           <div className={`bg-gradient-to-br ${selectedEventInfo.color} bg-opacity-20 backdrop-blur-sm border border-white/20 rounded-2xl p-6`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-white">Financial Readiness</h2>
               <div className="text-right">
-                <div className="text-4xl font-bold text-white">{selectedEventData.readiness}%</div>
+                <div className="text-4xl font-bold text-white">{selectedEventComputed.readiness}%</div>
                 <div className="text-sm text-white/80">Ready Score</div>
               </div>
             </div>
             <div className="w-full bg-slate-900/30 rounded-full h-4">
               <div
                 className="h-4 bg-white rounded-full transition-all duration-500"
-                style={{ width: `${selectedEventData.readiness}%` }}
+                style={{ width: `${selectedEventComputed.readiness}%` }}
               />
             </div>
           </div>
@@ -247,7 +420,7 @@ export default function LifeEvents() {
             <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
               <h3 className="text-xl font-bold text-white mb-4">Cost Breakdown</h3>
               <div className="space-y-3">
-                {selectedEventData.breakdown.map((item, idx) => (
+                {selectedEventBaseData.breakdown.map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
                     <span className="text-slate-300 text-sm">{item.category}</span>
                     <span className="text-white font-bold">
@@ -263,7 +436,7 @@ export default function LifeEvents() {
               <h3 className="text-xl font-bold text-white mb-4">Cost Timeline</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={selectedEventData.timeline}>
+                  <BarChart data={selectedEventBaseData.timeline}>
                     <XAxis dataKey="year" stroke="#94a3b8" />
                     <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${value / 1000}k`} />
                     <Tooltip
@@ -286,20 +459,20 @@ export default function LifeEvents() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Net Worth Impact</div>
-                <div className={`text-3xl font-bold ${selectedEventData.impact.netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {selectedEventData.impact.netWorth >= 0 ? '+' : ''}{selectedEventData.impact.netWorth}%
+                <div className={`text-3xl font-bold ${selectedEventComputed.impact.netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {selectedEventComputed.impact.netWorth >= 0 ? '+' : ''}{selectedEventComputed.impact.netWorth}%
                 </div>
               </div>
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Cash Flow Impact</div>
-                <div className={`text-3xl font-bold ${selectedEventData.impact.cashFlow >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {selectedEventData.impact.cashFlow >= 0 ? '+' : ''}{selectedEventData.impact.cashFlow}%
+                <div className={`text-3xl font-bold ${selectedEventComputed.impact.cashFlow >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {selectedEventComputed.impact.cashFlow >= 0 ? '+' : ''}{selectedEventComputed.impact.cashFlow}%
                 </div>
               </div>
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Savings Rate Impact</div>
-                <div className={`text-3xl font-bold ${selectedEventData.impact.savingsRate >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-                  {selectedEventData.impact.savingsRate >= 0 ? '+' : ''}{selectedEventData.impact.savingsRate}%
+                <div className={`text-3xl font-bold ${selectedEventComputed.impact.savingsRate >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                  {selectedEventComputed.impact.savingsRate >= 0 ? '+' : ''}{selectedEventComputed.impact.savingsRate}%
                 </div>
               </div>
             </div>
@@ -309,7 +482,7 @@ export default function LifeEvents() {
           <div className="bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 backdrop-blur-sm border border-emerald-500/30 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-4">Action Plan</h3>
             <div className="space-y-3">
-              {selectedEventData.recommendations.map((rec, idx) => (
+              {selectedEventBaseData.recommendations.map((rec, idx) => (
                 <div key={idx} className="flex items-start gap-3">
                   <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-white text-sm font-bold">{idx + 1}</span>
