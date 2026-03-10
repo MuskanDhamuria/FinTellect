@@ -231,7 +231,7 @@ export default function LifeEvents() {
       name: 'Buying a Home',
       icon: Home,
       color: 'from-blue-500 to-cyan-500',
-      timeline: '30 years',
+      timeline: '10 years',
       totalCost: 500000,
       upfrontCost: 115000,
       annualCost: 43800,
