@@ -463,8 +463,16 @@ export default function StressTest() {
   );
 
   const updateInputs = <K extends keyof DashboardInputs>(field: K, value: DashboardInputs[K]) => {
-    setDashboardInputs((prev) => normalizeDashboardInputs({ ...prev, [field]: value }));
-  };
+  setDashboardInputs((prev) => {
+    const updated = { ...prev, [field]: value };
+
+    if (field === 'age') {
+      return updated; // don't normalize while typing
+    }
+
+    return normalizeDashboardInputs(updated);
+  });
+};
 
   const toggleScenario = (id: ScenarioId) => {
     setSelectedScenarios((prev) => (prev.includes(id) ? prev.filter((scenarioId) => scenarioId !== id) : [...prev, id]));
@@ -543,10 +551,11 @@ export default function StressTest() {
               <span className="block text-sm text-slate-400 mb-2">Age</span>
               <input
                 type="number"
-                min="18"
-                max="90"
                 value={dashboardInputs.age}
-                onChange={(e) => updateInputs('age', Number(e.target.value) || DASHBOARD_DEFAULTS.age)}
+                onChange={(e) => {
+                const value = e.target.value;
+                updateInputs('age', value === '' ? 0 : Number(value));
+              }}
                 className="w-full rounded-xl bg-slate-900/80 border border-white/10 px-4 py-3 text-white outline-none focus:border-emerald-400"
               />
             </label>
@@ -728,8 +737,8 @@ export default function StressTest() {
                     <Tooltip
                       formatter={(value: number) => [`${value} months`, 'Survival time']}
                       contentStyle={{
-                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        backgroundColor: 'rgba(142, 157, 192, 0.95)',
+                        border: '1px solid rgba(142, 157, 192, 0.95)',
                         borderRadius: '8px',
                       }}
                     />
