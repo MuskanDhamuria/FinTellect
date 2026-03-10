@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Baby, Heart, GraduationCap, Home, Plane, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { useEffect, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 type RiskProfile = 'conservative' | 'moderate' | 'aggressive';
 
@@ -83,6 +82,46 @@ function getRiskFitScore(eventId: string, riskProfile: RiskProfile) {
   };
 
   return scores[eventId]?.[riskProfile] ?? 75;
+}
+
+function buildDynamicTimeline(
+  event: {
+    id: string;
+    totalCost: number;
+    upfrontCost: number;
+    annualCost: number;
+    yearsToFund: number;
+  },
+  inputs: FinancialInputs
+) {
+  const monthlyCashFlow = Math.max(0, inputs.monthlyIncome - inputs.monthlyExpenses);
+  const annualSavingsCapacity = monthlyCashFlow * 12;
+
+  const timeline: Array<{
+  year: string;
+  eventCost: number;
+  savedCapacity: number;
+  fundingGap: number;
+}> = [];
+  let cumulativeSaved = inputs.totalSavings;
+
+  for (let year = 1; year <= event.yearsToFund; year++) {
+    cumulativeSaved += annualSavingsCapacity;
+
+    const targetCost =
+      year === 1
+        ? event.upfrontCost + event.annualCost
+        : event.annualCost;
+
+    timeline.push({
+      year: `Year ${year}`,
+      eventCost: Math.round(targetCost),
+      savedCapacity: Math.round(annualSavingsCapacity),
+      fundingGap: Math.max(0, Math.round(event.totalCost - cumulativeSaved)),
+    });
+  }
+
+  return timeline;
 }
 
 function calculateReadiness(
@@ -333,17 +372,16 @@ export default function LifeEvents() {
         };
     }
   };
-
   const selectedEventInfo = selectedEvent
     ? lifeEvents.find((e) => e.id === selectedEvent)
     : null;
-
   const selectedEventBaseData = selectedEvent ? getEventDetails(selectedEvent) : null;
   const selectedEventComputed =
     selectedEventInfo ? calculateReadiness(selectedEventInfo, inputs) : null;
-  
-  selectedEventComputed?.readiness
-    
+  const selectedEventTimeline =
+    selectedEventInfo ? buildDynamicTimeline(selectedEventInfo, inputs) : [];
+
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-black min-h-screen">
       {/* Header */}
@@ -399,7 +437,9 @@ export default function LifeEvents() {
       {selectedEvent && selectedEventBaseData && selectedEventInfo && selectedEventComputed && (
         <div className="space-y-6">
           {/* Readiness Score */}
-          <div className={`bg-gradient-to-br ${selectedEventInfo.color} bg-opacity-20 backdrop-blur-sm border border-white/20 rounded-2xl p-6`}>
+          <div
+            className={`bg-gradient-to-br ${selectedEventInfo.color} bg-opacity-20 backdrop-blur-sm border border-white/20 rounded-2xl p-6`}
+          >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold text-white">Financial Readiness</h2>
               <div className="text-right">
@@ -412,6 +452,33 @@ export default function LifeEvents() {
                 className="h-4 bg-white rounded-full transition-all duration-500"
                 style={{ width: `${selectedEventComputed.readiness}%` }}
               />
+            </div>
+          </div>
+
+          {/* Funding Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-4">
+              <div className="text-slate-400 text-sm mb-2">Current Savings</div>
+              <div className="text-2xl font-bold text-white">
+                ${inputs.totalSavings.toLocaleString()}
+              </div>
+            </div>
+
+            <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-4">
+              <div className="text-slate-400 text-sm mb-2">Projected Annual Savings</div>
+              <div className="text-2xl font-bold text-cyan-400">
+                ${selectedEventComputed.annualFreeCashFlow.toLocaleString()}
+              </div>
+                <div className="text-xs text-slate-500 mt-1">
+                Based on monthly income minus expenses
+              </div>
+            </div>
+
+            <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-4">
+              <div className="text-slate-400 text-sm mb-2">Required Annual Saving</div>
+              <div className="text-2xl font-bold text-amber-400">
+                ${selectedEventComputed.requiredAnnualSaving.toLocaleString()}
+              </div>
             </div>
           </div>
 
@@ -431,12 +498,12 @@ export default function LifeEvents() {
               </div>
             </div>
 
-            {/* Timeline Costs */}
+            {/* Timeline */}
             <div className="bg-slate-800/50 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Cost Timeline</h3>
+              <h3 className="text-xl font-bold text-white mb-4">Funding Timeline</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={selectedEventBaseData.timeline}>
+                  <BarChart data={selectedEventTimeline}>
                     <XAxis dataKey="year" stroke="#94a3b8" />
                     <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${value / 1000}k`} />
                     <Tooltip
@@ -446,7 +513,9 @@ export default function LifeEvents() {
                         borderRadius: '8px',
                       }}
                     />
-                    <Bar dataKey="cost" fill="#10b981" radius={[8, 8, 0, 0]} />
+                    <Legend />
+                    <Bar dataKey="eventCost" fill="#10b981" radius={[8, 8, 0, 0]} name="Event Cost" />
+                    <Bar dataKey="savedCapacity" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Projected Annual Savings " />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -460,19 +529,24 @@ export default function LifeEvents() {
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Net Worth Impact</div>
                 <div className={`text-3xl font-bold ${selectedEventComputed.impact.netWorth >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {selectedEventComputed.impact.netWorth >= 0 ? '+' : ''}{selectedEventComputed.impact.netWorth}%
+                  {selectedEventComputed.impact.netWorth >= 0 ? '+' : ''}
+                  {selectedEventComputed.impact.netWorth}%
                 </div>
               </div>
+
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Cash Flow Impact</div>
                 <div className={`text-3xl font-bold ${selectedEventComputed.impact.cashFlow >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {selectedEventComputed.impact.cashFlow >= 0 ? '+' : ''}{selectedEventComputed.impact.cashFlow}%
+                  {selectedEventComputed.impact.cashFlow >= 0 ? '+' : ''}
+                  {selectedEventComputed.impact.cashFlow}%
                 </div>
               </div>
+
               <div className="bg-slate-700/30 rounded-xl p-4">
                 <div className="text-slate-400 text-sm mb-2">Savings Rate Impact</div>
                 <div className={`text-3xl font-bold ${selectedEventComputed.impact.savingsRate >= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
-                  {selectedEventComputed.impact.savingsRate >= 0 ? '+' : ''}{selectedEventComputed.impact.savingsRate}%
+                  {selectedEventComputed.impact.savingsRate >= 0 ? '+' : ''}
+                  {selectedEventComputed.impact.savingsRate}%
                 </div>
               </div>
             </div>
